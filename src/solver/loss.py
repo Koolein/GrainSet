@@ -31,11 +31,13 @@ losses = {
 }
 
 
-def get_loss(loss_name=cfg.OPTIM.LOSS,**kwargs):
+def get_loss(loss_name=cfg.OPTIM.LOSS, device=None, **kwargs):
     loss_name = loss_name.lower()
     if loss_name in losses:
-        return losses[loss_name](**kwargs).cuda()
+        loss = losses[loss_name](**kwargs)
+        return loss.to(device) if device is not None else loss
     else:
         print("Loss: {} is not implemented...,\
             using default loss: CrossEntropyLoss".format(loss_name))
-        return nn.CrossEntropyLoss()
+        loss = nn.CrossEntropyLoss()
+        return loss.to(device) if device is not None else loss

@@ -1,22 +1,61 @@
 import albumentations as A
-from albumentations import (RandomBrightness,RandomContrast,HueSaturationValue,Normalize,HorizontalFlip,VerticalFlip,Blur,
-                            MotionBlur,OneOf,MedianBlur,IAAAdditiveGaussianNoise,GaussNoise,OpticalDistortion,RGBShift,RandomCrop,
-                            Cutout,Resize,RandomResizedCrop,GaussianBlur,RandomSizedCrop)
+from albumentations import (RandomBrightnessContrast,HueSaturationValue,Normalize,HorizontalFlip,VerticalFlip,Blur,
+                            MotionBlur,OneOf,MedianBlur,GaussNoise,OpticalDistortion,RGBShift,RandomCrop,
+                            CoarseDropout,Resize,RandomResizedCrop,GaussianBlur,RandomSizedCrop)
 from albumentations.pytorch import ToTensorV2
 
 import numpy as np
 import torch
-import imgaug as ia
-import imgaug.augmenters as iaa
 
 def get_augmentor():
-    seq = iaa.Sequential([
-        iaa.Crop(px=(0, 16)),
-        iaa.Fliplr(0.5),
-        iaa.GaussianBlur(sigma=(0, 3.0))
-    ])
+    """
+    Legacy imgaug pipeline replacement (keeps the same callable signature):
+      - random crop up to 16px per side
+      - horizontal flip with p=0.5
+      - gaussian blur with sigma in [0, 3]
+
+    Input/Output: NCHW batch as np.ndarray or torch.Tensor.
+    """
+
+    aug = A.Compose(
+        [
+            A.CropAndPad(px=[-16, 0], keep_size=True, p=1.0),
+            A.HorizontalFlip(p=0.5),
+            A.GaussianBlur(blur_limit=(3, 7), sigma_limit=(0.0, 3.0), p=1.0),
+        ]
+    )
+
     def augment(images):
-        return seq.augment(images.transpose(0, 2, 3, 1)).transpose(0, 2, 3, 1)
+        is_torch = torch.is_tensor(images)
+        if is_torch:
+            original_device = images.device
+            original_dtype = images.dtype
+            batch = images.detach().cpu().numpy()
+        else:
+            original_dtype = getattr(images, "dtype", None)
+            batch = images
+
+        batch = np.asarray(batch)
+        if batch.ndim != 4:
+            raise ValueError(f"Expected a 4D NCHW batch, got shape={batch.shape!r}")
+
+        # NCHW -> NHWC for albumentations
+        batch_hwc = batch.transpose(0, 2, 3, 1)
+        batch_hwc = batch_hwc.astype(np.float32, copy=False)
+
+        out_hwc = np.empty_like(batch_hwc)
+        for i in range(batch_hwc.shape[0]):
+            out_hwc[i] = aug(image=batch_hwc[i])["image"]
+
+        out_chw = out_hwc.transpose(0, 3, 1, 2)
+
+        if is_torch:
+            out = torch.from_numpy(out_chw).to(device=original_device)
+            return out.to(dtype=original_dtype)
+        if original_dtype is not None:
+            return out_chw.astype(original_dtype, copy=False)
+        return out_chw
+
     return augment
     
     
@@ -66,8 +105,7 @@ def get_transforms(RandBright_limit=0.15, RandBright_ratio=0.3,RandContra_limit=
         # Cutout(num_holes=4,max_h_size=6,max_w_size=6,p=0.3),
         HorizontalFlip(),
         VerticalFlip(),
-        RandomBrightness(limit=RandBright_limit,p=RandBright_ratio),
-        RandomContrast(limit=RandContra_limit,p=RandContra_ratio),
+        RandomBrightnessContrast(brightness_limit=RandBright_limit,contrast_limit=RandContra_limit),
         # HueSaturationValue(hue_shift_limit=20,sat_shift_limit=25,val_shift_limit=20,p=0.1),
         RGBShift(20,20,20,p=0.3),
         OneOf([

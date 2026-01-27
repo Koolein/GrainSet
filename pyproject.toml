@@ -1,0 +1,30 @@
+[project]
+name = "grainset"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.10,<3.13"
+dependencies = [
+  "PyYAML",
+  "albumentations",
+  "ipykernel",
+  "jupyter",
+  "matplotlib",
+  "opencv-python",
+  "pandas",
+  "progress",
+  "scikit-learn",
+  "thop>=0.1.1.post2209072238",
+  "timm",
+  "torch",
+]
+
+# Note: whether you get CPU vs CUDA PyTorch depends on which wheel index uv resolves from.
+# This config prefers the official PyTorch CUDA 12.4 wheel index for `torch`.
+[[tool.uv.index]]
+name = "pytorch-cu124"
+url = "https://download.pytorch.org/whl/cu124"
+explicit = true
+
+[tool.uv.sources]
+torch = { index = "pytorch-cu124" }

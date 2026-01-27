@@ -50,13 +50,15 @@ def main(args):
 
     print('MODEL RESUME PATH:',cfg.MODEL.RESUME_PATH)
     model = model.to(device=device)
-    model = nn.DataParallel(model)
+    if device.type == "cuda" and torch.cuda.device_count() > 1:
+        model = nn.DataParallel(model)
     try:
-        show_flops_params(copy.deepcopy(model), 'cuda')
+        if device.type == "cuda":
+            show_flops_params(copy.deepcopy(model), 'cuda')
     except Exception as e:
         logging.warning('get flops and params error: {}'.format(e))
 
-    criterion = get_loss(loss_name=cfg.OPTIM.LOSS)
+    criterion = get_loss(loss_name=cfg.OPTIM.LOSS, device=device)
 
     optimizer = get_optimizer(model, optim_name =cfg.OPTIM.NAME, learn_rate=cfg.OPTIM.INIT_LR)
     lr_scheduler = get_lr_scheduler(optimizer,lr_mode = cfg.OPTIM.LR_SCHEDULER)
@@ -232,5 +234,5 @@ if __name__ == "__main__":
     if args.phase:
         cfg.PHASE = args.phase
 
-    device = torch.device("cuda")
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     main(args)

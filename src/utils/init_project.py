@@ -58,8 +58,9 @@ def seed_all_rng(seed=None):
     np.random.seed(seed)
     torch.set_rng_state(torch.manual_seed(seed).get_state())
     random.seed(seed)
-    torch.cuda.manual_seed(seed)
-    torch.backends.cudnn.deterministic = True
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed(seed)
+        torch.backends.cudnn.deterministic = True
 
 
 # make dir for use
