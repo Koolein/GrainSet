@@ -62,6 +62,7 @@ def main(args):
 
     optimizer = get_optimizer(model, optim_name =cfg.OPTIM.NAME, learn_rate=cfg.OPTIM.INIT_LR)
     lr_scheduler = get_lr_scheduler(optimizer,lr_mode = cfg.OPTIM.LR_SCHEDULER)
+    scaler = torch.cuda.amp.GradScaler(enabled=(device.type == "cuda"))
 
     # Train
     iters_per_epoch = len(train_dataset) // (cfg.TRAIN.BATCH)
@@ -73,7 +74,7 @@ def main(args):
 
         print('\n Epoch: [%d | %d] LR: %f' % (epoch + 1, cfg.TRAIN.EPOCHS,optimizer.param_groups[0]['lr']))
 
-        train_loss, train_acc, train_2 = train(model, train_loader, criterion, optimizer, epoch)
+        train_loss, train_acc, train_2 = train(model, train_loader, criterion, optimizer, epoch, scaler)
         val_loss, val_acc, test_2 = validate(model, val_loader, criterion, epoch)
 
         # update lr, value depending on the type of lr scheduler
@@ -98,22 +99,27 @@ def main(args):
     print('Best acc:',best_acc)
 
 
-def train(model, train_loader, criterion, optimizer, epoch):
+def train(model, train_loader, criterion, optimizer, epoch, scaler):
     model.train()
     batch_time, data_time = AverageMeter(), AverageMeter()
     losses, top1, top2, f1_avg = AverageMeter(), AverageMeter(), AverageMeter(), AverageMeter()
     end = time.time()
 
     bar = Bar('Training: ', max=len(train_loader))
+    amp_enabled = scaler.is_enabled()
 
     for batch_idx, (inputs, targets, _) in enumerate(train_loader):
         # measure data loading time
         data_time.update(time.time() - end)
 
-        inputs, targets = inputs.to(device=device), targets.to(device=device)
-        # compute output
-        outputs = model(inputs)
-        loss = criterion(outputs, targets)
+        inputs = inputs.to(device=device, non_blocking=(device.type == "cuda"))
+        targets = targets.to(device=device, non_blocking=(device.type == "cuda"))
+
+        optimizer.zero_grad(set_to_none=True)
+
+        with torch.cuda.amp.autocast(enabled=amp_enabled):
+            outputs = model(inputs)
+            loss = criterion(outputs, targets)
 
         # measure accuracy and record loss
         prec1, prec2 = accuracy(outputs.data, targets.data, topk=(1, 2))
@@ -122,14 +128,14 @@ def train(model, train_loader, criterion, optimizer, epoch):
         top1.update(prec1.item(), inputs.size(0))
         top2.update(prec2.item(), inputs.size(0))
 
-        # compute gradient and do SGD step
-        optimizer.zero_grad()
-        loss.backward()
+        scaler.scale(loss).backward()
 
-        # clip gradient
-        torch.nn.utils.clip_grad_norm_(
-            model.parameters(), max_norm=5.0, norm_type=2)
-        optimizer.step()
+        # clip gradient (after unscale)
+        scaler.unscale_(optimizer)
+        torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=5.0, norm_type=2)
+
+        scaler.step(optimizer)
+        scaler.update()
 
         # measure elapsed time
         batch_time.update(time.time() - end)
@@ -171,18 +177,21 @@ def validate(model, val_loader, criterion, epoch):
 
     bar = Bar('Validating: ', max=len(val_loader))
     # f1_score = F1Score()
+    amp_enabled = (device.type == "cuda")
 
     with torch.no_grad():
         for batch_idx, (inputs, targets, _) in enumerate(val_loader):
             # measure data loading time
             data_time.update(time.time() - end)
 
-            inputs, targets = inputs.to(device=device), targets.to(device=device)
+            inputs = inputs.to(device=device, non_blocking=(device.type == "cuda"))
+            targets = targets.to(device=device, non_blocking=(device.type == "cuda"))
             inputs, targets = torch.autograd.Variable(inputs), torch.autograd.Variable(targets)
 
             # compute output
-            outputs = model(inputs)
-            loss = criterion(outputs, targets)
+            with torch.cuda.amp.autocast(enabled=amp_enabled):
+                outputs = model(inputs)
+                loss = criterion(outputs, targets)
 
             # measure accuracy and record loss
             prec1, prec2 = accuracy(outputs.data, targets.data, topk=(1, 2))

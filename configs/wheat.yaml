@@ -37,14 +37,14 @@ OPTIM:
 
 
 TRAIN:
-  BATCH: 128
+  BATCH: 1
   EPOCHS: 50
   START_EPOCH: 0
   SIZE: (224,224)
 
 
 TEST:  
-  BATCH: 128
+  BATCH: 1
   SIZE: (224,224)
 
 
