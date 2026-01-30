@@ -135,3 +135,6 @@ checkpoints/
 logs/
 .vscode/
 runs/
+datasets/22992317.zip
+datasets/22992317/wheat.xml
+datasets/22992317/wheat.zip

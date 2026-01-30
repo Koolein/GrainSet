@@ -27,7 +27,7 @@ cfg.DATASET.PATH = '/home/fdd/dataset/black_normal/black_black/' # path to datas
 cfg.DATASET.CLASS_NUMS = 8  # 
 cfg.DATASET.SPILT_ONLINE = False  # split dataset to train and val online or offline
 cfg.DATASET.SPILT_RATE = 0.1
-cfg.DATASET.WORKERS = 2   # set number of data loading workers   
+cfg.DATASET.WORKERS = 16   # set number of data loading workers   
 
 cfg.DATASET.MEANS = [0.435, 0.517, 0.580]
 cfg.DATASET.STD =   [1.0, 1.0, 1.0]
